@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getProduct, logContact } from '../api/products';
-import { getOwnerRatings, getMyRating, rateOwner } from '../api/ratings';
+import { getOwnerRatings, getMyRating, rateOwner, checkContactGate } from '../api/ratings';
 import { useAuth } from '../context/AuthContext';
 import { Stars, StarPicker } from '../components/ui/StarRating';
 import Spinner from '../components/ui/Spinner';
@@ -22,6 +22,7 @@ export default function ProductDetail() {
   const [myRating, setMyRating] = useState(0);
   const [myReview, setMyReview] = useState('');
   const [ratingLoading, setRatingLoading] = useState(false);
+  const [canReview, setCanReview] = useState(false);
 
   useEffect(() => {
     getProduct(id)
@@ -42,6 +43,10 @@ export default function ProductDetail() {
           }
         })
         .catch(() => {});
+
+      checkContactGate(product._id)
+        .then((res) => setCanReview(res.data.canReview))
+        .catch(() => {});
     }
   }, [user, product]);
 
@@ -50,6 +55,7 @@ export default function ProductDetail() {
     try {
       const res = await logContact(id);
       toast.success('Opening WhatsApp...');
+      setCanReview(true); // unlock review after contacting
       setTimeout(() => window.open(res.data.whatsappUrl, '_blank'), 500);
     } catch (err) {
       toast.error(err.message);
@@ -62,7 +68,7 @@ export default function ProductDetail() {
     if (!myRating) { toast.error('Please select a star rating'); return; }
     setRatingLoading(true);
     try {
-      await rateOwner({ ownerId: product.owner._id, rating: myRating, review: myReview });
+      await rateOwner({ ownerId: product.owner._id, productId: product._id, rating: myRating, review: myReview });
       toast.success('Rating submitted!');
       const res = await getOwnerRatings(product.owner._id);
       setRatings(res.data.ratings);
@@ -143,19 +149,25 @@ export default function ProductDetail() {
           <div className="rating-box">
             <h3>Rate this Owner</h3>
             {user ? (
-              <>
-                <StarPicker value={myRating} onChange={setMyRating} />
-                <textarea
-                  className="form-textarea"
-                  placeholder="Leave a review (optional)"
-                  value={myReview}
-                  onChange={(e) => setMyReview(e.target.value)}
-                  style={{ marginTop: '0.75rem', minHeight: 70 }}
-                />
-                <button className="btn btn-primary btn-sm mt-1" onClick={handleRate} disabled={ratingLoading}>
-                  {ratingLoading ? 'Submitting...' : myRating ? 'Update Rating' : 'Submit Rating'}
-                </button>
-              </>
+              canReview ? (
+                <>
+                  <StarPicker value={myRating} onChange={setMyRating} />
+                  <textarea
+                    className="form-textarea"
+                    placeholder="Leave a review (optional)"
+                    value={myReview}
+                    onChange={(e) => setMyReview(e.target.value)}
+                    style={{ marginTop: '0.75rem', minHeight: 70 }}
+                  />
+                  <button className="btn btn-primary btn-sm mt-1" onClick={handleRate} disabled={ratingLoading}>
+                    {ratingLoading ? 'Submitting...' : myRating ? 'Update Rating' : 'Submit Rating'}
+                  </button>
+                </>
+              ) : (
+                <p className="text-muted text-sm">
+                  You need to <strong>contact the owner via WhatsApp</strong> before leaving a review.
+                </p>
+              )
             ) : (
               <p className="text-muted text-sm">
                 <a href="/login" style={{ color: 'var(--accent)', fontWeight: 600 }}>Login</a> to rate this owner.

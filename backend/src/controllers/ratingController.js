@@ -1,14 +1,15 @@
 const Rating = require('../models/Rating');
 const User = require('../models/User');
 const Product = require('../models/Product');
+const ContactLog = require('../models/ContactLog');
 
 // POST /api/ratings — logged-in users only
 const rateOwner = async (req, res, next) => {
   try {
-    const { ownerId, rating, review } = req.body;
+    const { ownerId, rating, review, productId } = req.body;
 
-    if (!ownerId || !rating) {
-      return res.status(400).json({ success: false, message: 'ownerId and rating are required' });
+    if (!ownerId || !rating || !productId) {
+      return res.status(400).json({ success: false, message: 'ownerId, productId and rating are required' });
     }
 
     const owner = await User.findOne({ _id: ownerId, role: 'OWNER' });
@@ -19,6 +20,19 @@ const rateOwner = async (req, res, next) => {
     // Prevent rating yourself
     if (req.user._id.toString() === ownerId) {
       return res.status(400).json({ success: false, message: 'You cannot rate yourself' });
+    }
+
+    // Contact gate — must have contacted this product before reviewing
+    const hasContacted = await ContactLog.findOne({
+      user: req.user._id,
+      product: productId,
+    });
+
+    if (!hasContacted) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only review after contacting the owner via WhatsApp',
+      });
     }
 
     // Upsert: update existing rating or create new one
@@ -75,4 +89,17 @@ const getMyRating = async (req, res, next) => {
   }
 };
 
-module.exports = { rateOwner, getOwnerRatings, getMyRating };
+// GET /api/ratings/can-review/:productId — check if user has contacted this product
+const checkContactGate = async (req, res, next) => {
+  try {
+    const contacted = await ContactLog.findOne({
+      user: req.user._id,
+      product: req.params.productId,
+    });
+    res.json({ success: true, canReview: !!contacted });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { rateOwner, getOwnerRatings, getMyRating, checkContactGate };
