@@ -24,7 +24,7 @@ export default function Navbar() {
   return (
     <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
       <div className="navbar-inner">
-        {/* Brand */}
+        {/* Brand name */}
         <Link to="/" className="navbar-brand">
           Rent<span>Hub</span>
         </Link>
